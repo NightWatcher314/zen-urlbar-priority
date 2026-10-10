@@ -1,0 +1,13 @@
+[
+  { "type": "checkbox", "property": "mod.urlbar-priority.enabled", "label": "启用自定义排序", "defaultValue": true },
+  { "type": "separator", "label": "权重越大越靠前；相同权重保留原生顺序。" },
+  { "type": "string", "property": "mod.urlbar-priority.pinnedTabs", "label": "固定标签 / Essentials", "defaultValue": 120, "value": "number" },
+  { "type": "string", "property": "mod.urlbar-priority.openTabs", "label": "其他已打开标签", "defaultValue": 100, "value": "number" },
+  { "type": "string", "property": "mod.urlbar-priority.bookmarks", "label": "书签", "defaultValue": 60, "value": "number" },
+  { "type": "string", "property": "mod.urlbar-priority.history", "label": "浏览历史", "defaultValue": 50, "value": "number" },
+  { "type": "string", "property": "mod.urlbar-priority.searchSuggestions", "label": "搜索建议", "defaultValue": 20, "value": "number" },
+  { "type": "string", "property": "mod.urlbar-priority.heuristic", "label": "原生默认访问 / 搜索结果", "defaultValue": 0, "value": "number" },
+  { "type": "string", "property": "mod.urlbar-priority.other", "label": "其他结果", "defaultValue": 10, "value": "number" },
+  { "type": "separator", "label": "高级：按 provider 名覆盖上述权重。错误 JSON 会回退原生排序。" },
+  { "type": "string", "property": "mod.urlbar-priority.providers", "label": "Provider 权重 JSON", "defaultValue": "{}", "placeholder": "{\"Places\":80,\"SearchSuggestions\":10}" }
+]

@@ -1,0 +1,46 @@
+TAP version 13
+# Subtest: existing pinned tab wins over new navigation, other tabs and history
+ok 1 - existing pinned tab wins over new navigation, other tabs and history
+  ---
+  duration_ms: 0.877248
+  type: 'test'
+  ...
+# Subtest: provider overrides work with both legacy and modern provider names
+ok 2 - provider overrides work with both legacy and modern provider names
+  ---
+  duration_ms: 0.161256
+  type: 'test'
+  ...
+# Subtest: equal weights preserve native ordering, zero and negative overrides are valid
+ok 3 - equal weights preserve native ordering, zero and negative overrides are valid
+  ---
+  duration_ms: 0.130669
+  type: 'test'
+  ...
+# Subtest: invalid overrides are rejected rather than partially applied
+ok 4 - invalid overrides are rejected rather than partially applied
+  ---
+  duration_ms: 0.152382
+  type: 'test'
+  ...
+# Subtest: explicit search modes, bookmark keywords and empty queries retain native behavior
+ok 5 - explicit search modes, bookmark keywords and empty queries retain native behavior
+  ---
+  duration_ms: 0.75809
+  type: 'test'
+  ...
+# Subtest: final cap honors multi-row results and continues after a result that cannot fit
+ok 6 - final cap honors multi-row results and continues after a result that cannot fit
+  ---
+  duration_ms: 0.115939
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 38.681256

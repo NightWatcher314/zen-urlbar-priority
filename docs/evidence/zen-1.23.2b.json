@@ -1,0 +1,22 @@
+{
+  "checks": [
+    "local installer registry passes real Sine JS gate and preferences parser",
+    "scriptloader initializes native muxer hook",
+    "native Command/Ctrl+T command opens Zen floating new-tab URL bar",
+    "oldest pinned tab wins beyond provider and muxer caps; selected without rewriting input",
+    "Enter switches to existing pinned tab; no duplicate tab",
+    "Enter still switches with native secondaryActions enabled",
+    "weight changes apply without restart",
+    "actual provider override moves its results below default navigation/search",
+    "trailing native tab-restriction token retains native heuristic flags",
+    "restricted-query Enter retains native secondary-action navigation",
+    "invalid JSON safely falls back to native results",
+    "reload has one shared hook, not stacked wrappers",
+    "local tab provider uses originating controller while another window is focused",
+    "shared hook survives closing its first owner window",
+    "private oldest pin is prioritized and switches; private tabs stay out of normal results",
+    "unload removes hook and API"
+  ],
+  "version": "1.23.2b",
+  "name": "Zen"
+}
