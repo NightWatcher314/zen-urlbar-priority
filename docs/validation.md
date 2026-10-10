@@ -10,8 +10,8 @@
 
 ## 已通过
 
-- [地址栏与 Sine 集成：18 项](evidence/zen-1.23.2b.json)：原生新标签命令、超出原生候选上限的旧固定标签、默认选中、Enter 不重复建标签、secondaryActions 行为、动态权重、provider 覆盖、限制搜索及其 Enter 行为、无效 JSON 回退、重载卸载、查询窗口归属、首窗口关闭后的连续使用、隐私固定标签及隐私隔离、Sine JS gate 和配置解析、普通 `new` 查询中与 Zen 动作建议并存的固定标签排序，以及 learned action 降级后的执行数据保留。
-- [排序单测：7 项](evidence/ranking.txt)：类别权重、provider 名称兼容、稳定排序、0 / 负权重、错误配置、特殊搜索、结果跨度、普通 Zen 动作建议不屏蔽排序。
+- [地址栏与 Sine 集成：21 项](evidence/zen-1.23.2b.json)：原生新标签命令、超出原生候选上限的旧固定标签、默认选中、Enter 不重复建标签、secondaryActions 行为、动态权重、provider 覆盖、限制搜索及其 Enter 行为、无效 JSON 回退、重载卸载、查询窗口归属、首窗口关闭后的连续使用、隐私固定标签及隐私隔离、Sine JS gate 和配置解析、普通 `new` 查询中与 Zen 动作建议并存的固定标签排序，以及 learned action 降级后的执行数据保留。
+- [排序单测：12 项](evidence/ranking.txt)：类别权重、provider 名称兼容、稳定排序、0 / 负权重、错误配置、特殊搜索、结果跨度、普通 Zen 动作建议不屏蔽排序。
 - [安装器：3 项](evidence/installer.txt)：只读预览、备份、保留其他注册项、写入失败回滚和重试、拒绝未安装 Sine 的 profile。
 - JS 语法检查；只读独立代码审查发现的问题已修复。
 
@@ -45,3 +45,12 @@
 回归测试在 v0.1.0 逻辑上实际失败，修复后通过：查询中确实存在 `zenAction`，匹配的固定应用仍排第一且默认选中，Enter 切换原标签、标签数量不变。显式 `searchMode`、限制 token、书签关键字及命令前缀保留原生行为。降级 learned action 时保留其 `commandId` 和原生执行 payload。
 
 更新后需完全退出并重开浏览器，清除进程级系统模块缓存。日常用户 profile 的更新仍由 Sine 管理。
+
+
+## v0.1.2 搜索入口与强制搜索
+
+普通词不再匹配 URL query 参数中的导航标志（例如 `newwindow`），显式 URL 输入仍匹配完整地址。高权重标签填满列表时，默认保留一个普通搜索入口；结果上限为 1 时保留最高权重结果。搜索去重保留隐私窗口动作语义。
+
+默认启用 macOS Command+Enter / 其他平台 Ctrl+Enter：用默认引擎搜索当前原始输入，在新标签打开，独立于首结果。隐私窗口取隐私默认引擎。设置可关闭。已完成查询或切换标签后，不用旧查询替换当前 URL。
+
+原生回归覆盖 20 个只有 query key 命中的无关标签、满列表搜索入口、本地默认引擎提交与新标签数量、已完成查询后切换页面的原始文本。单测覆盖 macOS modifier、IME / Alt / Shift 排除、完整 URL / 内部 URL、搜索动作语义。macOS 实机 Command+Enter 与隐私默认引擎提交尚未端到端验证。

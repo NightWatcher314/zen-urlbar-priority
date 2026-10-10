@@ -19,7 +19,7 @@ from marionette_driver.keys import Keys
 
 class Page(BaseHTTPRequestHandler):
     def do_GET(self):
-        body = f"<!doctype html><title>{self.path}</title><h1>Local mod test</h1>".encode()
+        body = f"<!doctype html><title>{self.path.split('?')[0]}</title><h1>Local mod test</h1>".encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.send_header("Content-Length", str(len(body)))
@@ -152,6 +152,7 @@ def main():
                             results:(gURLBar.view.queryContext?.results || []).map(r => ({
                               type:r.type, url:r.payload.url, provider:r.providerName, heuristic:r.heuristic,
                               source:r.source, zenAction:r.payload.zenAction, providesSearchMode:r.payload.providesSearchMode
+                              ,searchQuery:r.payload.query, suggestion:r.payload.suggestion
                             })), selected:gURLBar.view.selectedResult?.payload.url,
                             value:gURLBar.value};
                         ''')
@@ -166,6 +167,7 @@ def main():
                     raise RuntimeError(f"No stable results: {last}")
 
                 m.execute_script('''
+                    for(let i=0;i<20;i++) gBrowser.addTrustedTab(arguments[0] + '/search?newwindow=1&q=unrelated-' + i);
                     window.__newAppPin = gBrowser.addTrustedTab(arguments[0] + '/new-api');
                     gBrowser.pinTab(__newAppPin);
                     BrowserCommands.openTab();
@@ -174,6 +176,9 @@ def main():
                 current = query('new')
                 assert current['results'][0]['url'] == base + '/new-api', current
                 assert any(r['zenAction'] for r in current['results']), current
+                assert not any('newwindow=' in (r['url'] or '') for r in current['results']), current
+                assert any(r['type'] == 2 and r['searchQuery'] == 'new' for r in current['results']), current
+                report['checks'].append('navigation parameter keys do not flood new query; default search entry stays visible')
                 assert current['selected'] == base + '/new-api', current
                 clone_check = m.execute_script('''
                     const {UrlbarResult} = ChromeUtils.importESModule('chrome://browser/content/urlbar/UrlbarResult.mjs');
@@ -210,6 +215,7 @@ def main():
                 assert current["results"][0]["url"] == base + "/pinned-needle", current
                 assert current["selected"] == base + "/pinned-needle", current
                 assert len(current["results"]) <= 3, current
+                assert any(r['type'] == 2 and r['searchQuery'] == 'needle' for r in current['results']), current
                 assert current["value"] == "needle", current
                 report["checks"].append("oldest pinned tab wins beyond provider and muxer caps; selected without rewriting input")
                 count = m.execute_script("return gBrowser.tabs.length;")
@@ -219,6 +225,49 @@ def main():
                 assert m.execute_script("return gBrowser.selectedTab === __priorityTest.pin;"), current
                 assert m.execute_script("return gBrowser.tabs.length;") == count
                 report["checks"].append("Enter switches to existing pinned tab; no duplicate tab")
+
+                engine_result = m.execute_async_script('''
+                    const done=arguments[arguments.length-1]; const base=arguments[0];
+                    (async()=>{
+                      window.__testSearchService=ChromeUtils.importESModule('moz-src:///toolkit/components/search/SearchService.sys.mjs').SearchService;
+                      window.__previousSearchEngine=await __testSearchService.getDefault();
+                      const engine=await __testSearchService.addUserEngine({name:'Priority Local Search',url:base+'/engine?q={searchTerms}'});
+                      await __testSearchService.setDefault(engine,'user');
+                      done({name:engine.name});
+                    })().catch(error=>done({error:error.message}));
+                ''', script_args=[base])
+                assert engine_result.get('name') == 'Priority Local Search', engine_result
+                m.execute_script('''
+                    gBrowser.selectedTab=__priorityTest.ordinary0; BrowserCommands.openTab();
+                ''')
+                current=query('new')
+                assert current['results'][0]['type']==1, current
+                count=m.execute_script('return gBrowser.tabs.length;')
+                field=m.execute_script('return gURLBar.inputField;')
+                field.send_keys(Keys.CONTROL, Keys.ENTER, Keys.NULL)
+                for _ in range(50):
+                    location=m.execute_script('return gBrowser.selectedBrowser.currentURI.spec;')
+                    if location==base+'/engine?q=new':break
+                    time.sleep(.1)
+                assert location==base+'/engine?q=new', location
+                assert m.execute_script('return gBrowser.tabs.length;')==count+1
+                report['checks'].append('Ctrl+Enter searches typed text with default engine in a new tab despite selected pinned tab')
+                # Returning to a page after a finished query must not reuse "new".
+                m.execute_script("gBrowser.selectedTab=__priorityTest.ordinary0; gURLBar.focus(); gURLBar.view.close(); gURLBar.handleRevert();")
+                current_value=m.execute_script('return gURLBar.value;')
+                expected=m.execute_script("return arguments[0]+'/engine?q='+encodeURIComponent(arguments[1]);", script_args=[base,current_value])
+                field=m.execute_script('return gURLBar.inputField;')
+                field.send_keys(Keys.CONTROL, Keys.ENTER, Keys.NULL)
+                for _ in range(50):
+                    location=m.execute_script('return gBrowser.selectedBrowser.currentURI.spec;')
+                    if location==expected:break
+                    time.sleep(.1)
+                assert location==expected, (location,expected)
+                report['checks'].append('finished query and tab switch do not reuse stale search text')
+                m.execute_async_script('''
+                    const done=arguments[arguments.length-1];
+                    __testSearchService.setDefault(__previousSearchEngine,'user').then(()=>done(true),error=>done({error:error.message}));
+                ''')
 
                 m.execute_script('''
                     Services.prefs.setBoolPref('browser.urlbar.secondaryActions.switchToTab', true);

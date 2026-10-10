@@ -2,7 +2,7 @@
   "id": "d97b7d1d-13c5-4e19-81a9-0ab41db785e3",
   "name": "URL Bar Priority",
   "description": "自定义地址栏结果和 provider 权重，优先切换已打开或固定的标签。",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": "NightWatcher314",
   "homepage": "https://github.com/NightWatcher314/zen-urlbar-priority",
   "preferences": "preferences.json",

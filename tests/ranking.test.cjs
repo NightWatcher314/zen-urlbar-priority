@@ -62,3 +62,44 @@ test('final cap honors multi-row results and continues after a result that canno
   const items = [result('tab'), result('large', { resultSpan: 3 }), result('history')];
   assert.deepEqual(core.takeWithinSpan(items, 2, r => r.resultSpan || 1).map(r => r.id), ['tab', 'history']);
 });
+
+test('navigation query parameter names do not match ordinary tab queries', () => {
+  assert.equal(core.matchesTab('https://google.com/search?newwindow=1&q=unrelated', 'Unrelated - Google Search', 'new'), false);
+  assert.equal(core.matchesTab('https://newapi.example/', 'Dashboard', 'new'), true);
+  assert.equal(core.matchesTab('https://example.com/%E6%96%B0', 'Dashboard', '新'), true);
+  assert.equal(core.matchesTab('https://google.com/search?newwindow=1', 'Google', 'newwindow=1'), true);
+});
+
+test('a full tab list keeps a search slot while preserving the highest-priority result', () => {
+  const tabs = [result('pin'), result('tab1'), result('tab2')];
+  const search = result('search', {type:2});
+  assert.deepEqual(core.takeWithinSpan([...tabs, search], 3, () => 1, search).map(r => r.id), ['pin','tab1','search']);
+  assert.deepEqual(core.takeWithinSpan([...tabs, search], 1, () => 1, search).map(r => r.id), ['pin']);
+  assert.deepEqual(core.takeWithinSpan([search, ...tabs], 3, () => 1, search).map(r => r.id), ['search','pin','tab1']);
+});
+
+test('force-search modifier follows platform and leaves composition and other combinations alone', () => {
+  const event = {key:'Enter', metaKey:true};
+  assert.equal(core.isForceSearchKey(event, 'macosx'), true);
+  assert.equal(core.isForceSearchKey({key:'Enter',ctrlKey:true}, 'linux'), true);
+  assert.equal(core.isForceSearchKey({key:'Enter',ctrlKey:true}, 'macosx'), false);
+  for (const extra of [{shiftKey:true},{altKey:true},{isComposing:true},{ctrlKey:true}])
+    assert.equal(core.isForceSearchKey({...event,...extra}, 'macosx'), false);
+});
+
+test('force search uses typed text instead of completion or selected-tab URL', () => {
+  assert.equal(core.searchText('https://newapi.example/', 'new', 'new', true), 'new');
+  assert.equal(core.searchText('fresh', 'fresh', 'old'), 'fresh');
+  assert.equal(core.searchText('other', 'old', 'other', true), 'other');
+  assert.equal(core.searchText('', 'old', 'old'), '');
+  assert.equal(core.searchText('https://example.com/', null, ''), 'https://example.com/');
+});
+
+
+test('finished queries cannot replace current URL and search actions stay distinct', () => {
+  assert.equal(core.searchText('https://another.example/', 'new', 'new', false), 'https://another.example/');
+  assert.equal(core.matchesTab('https://example.com/?q=x#anchor', '', 'https://example.com/?q=x#anchor'), true);
+  assert.equal(core.matchesTab('about:config', '', 'about:config'), true);
+  assert.equal(core.isPlainSearch(result('search', {type:2,payload:{query:'new'}}), types), true);
+  assert.equal(core.isPlainSearch(result('private', {type:2,payload:{query:'new',inPrivateWindow:true}}), types), false);
+});

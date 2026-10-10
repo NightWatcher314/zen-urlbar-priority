@@ -27,7 +27,8 @@
     if (result.type === types.TAB_SWITCH) {
       return isPinned(result) ? "pinnedTabs" : "openTabs";
     }
-    if (result.heuristic) return "heuristic";
+    if (result.heuristic || (result.type === types.SEARCH && result.payload?.query &&
+        !result.payload.suggestion && !result.payload.providesSearchMode)) return "heuristic";
     if (result.source === sources.BOOKMARKS) return "bookmarks";
     if (result.source === sources.HISTORY) return "history";
     if (result.type === types.SEARCH && result.payload?.suggestion) {
@@ -55,7 +56,7 @@
         r.payload?.providesSearchMode));
   }
 
-  function takeWithinSpan(results, max, span) {
+  function takeWithinSpan(results, max, span, required = null) {
     const selected = [];
     let used = 0;
     for (const result of results) {
@@ -64,10 +65,46 @@
       selected.push(result);
       used += size;
     }
+    if (required && !selected.includes(required) && selected.length &&
+        span(selected[0]) + span(required) <= max) {
+      return [...takeWithinSpan(results.filter(r => r !== required), max - span(required), span), required];
+    }
     return selected;
   }
 
-export const core = { DEFAULTS, parseOverrides, category, rank, shouldSort, takeWithinSpan };
+  function matchesTab(url, title, query) {
+    let address = url;
+    try {
+      const parsed = new URL(url);
+      // Query parameter names such as newwindow are navigation flags, not tab
+      // names. Include the query only when the user explicitly types URL syntax.
+      if (!/[?=&]/.test(query)) parsed.search = "";
+      address = parsed.href;
+    } catch { /* Internal URLs still match their title or plain address. */ }
+    let text = `${address}\n${title || ""}`;
+    try { text = decodeURIComponent(text); } catch { /* Malformed percent escapes. */ }
+    text = text.toLowerCase();
+    return query.trim().toLowerCase().split(/\s+/).every(token => text.includes(token));
+  }
+
+  function isForceSearchKey(event, platform) {
+    return Boolean(event.key === "Enter" && !event.isComposing && !event.altKey && !event.shiftKey &&
+      (platform === "macosx" ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey));
+  }
+
+  function searchText(value, typedQuery, lastQuery, queryActive) {
+    if (!value.trim()) return "";
+    if (typedQuery === value) return typedQuery;
+    return queryActive && lastQuery ? lastQuery : value;
+  }
+
+  function isPlainSearch(result, types) {
+    return result.type === types.SEARCH && Boolean(result.payload.query) &&
+      !result.payload.suggestion && !result.payload.providesSearchMode && !result.payload.inPrivateWindow;
+  }
+
+export const core = { DEFAULTS, parseOverrides, category, rank, shouldSort, takeWithinSpan,
+  matchesTab, isForceSearchKey, searchText, isPlainSearch };
 
 export function attach(win) {
   if (win.location.href !== "chrome://browser/content/browser.xhtml") return;
@@ -97,6 +134,9 @@ export function attach(win) {
       Result = importUrlbar("UrlbarResult").UrlbarResult;
     }
     const { PrivateBrowsingUtils } = ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
+    const { AppConstants } = ChromeUtils.importESModule("resource://gre/modules/AppConstants.sys.mjs");
+    const searchService = Services.search || ChromeUtils.importESModule(
+      "moz-src:///toolkit/components/search/SearchService.sys.mjs").SearchService;
     const muxer = manager?.muxers?.get("UnifiedComplete");
     if (!muxer || typeof muxer.sort !== "function") {
       throw new Error("当前浏览器没有可用的 UnifiedComplete 地址栏排序接口。");
@@ -113,7 +153,20 @@ export function attach(win) {
         weights[key] = Number.isFinite(raw) ? raw : fallback;
       }
       const overrides = parseOverrides(Services.prefs.getStringPref(PREFIX + "providers", "{}"));
-      return { weights, overrides, enabled: Services.prefs.getBoolPref(PREFIX + "enabled", true) };
+      return { weights, overrides, enabled: Services.prefs.getBoolPref(PREFIX + "enabled", true),
+        keepSearchRow: Services.prefs.getBoolPref(PREFIX + "keepSearchRow", true),
+        forceSearchShortcut: Services.prefs.getBoolPref(PREFIX + "forceSearchShortcut", true) };
+    }
+
+    function makeResult(type, source, payload, providerName) {
+      if (typeof Result.fromWire === "function") return new Result({ type, source, payload, providerName });
+      const result = new Result(type, source, payload, {});
+      result.providerName = providerName;
+      return result;
+    }
+
+    async function defaultEngine(isPrivate) {
+      return isPrivate ? searchService.getDefaultPrivate() : searchService.getDefault();
     }
 
     function pinnedKeys(context) {
@@ -175,7 +228,6 @@ export function attach(win) {
           // providers run, so never infer ownership from the most recent window.
           const browserWin = controller?.browserWindow || controller?.input?.window || context.window;
           if (!browserWin?.gBrowser || PrivateBrowsingUtils.isWindowPrivate(browserWin) !== Boolean(context.isPrivate)) return;
-          const tokens = context.searchString.toLowerCase().trim().split(/\s+/);
           const space = browserWin.gZenWorkspaces?.activeWorkspace;
           const candidates = [];
           for (const tab of browserWin.gBrowser.tabs) {
@@ -185,22 +237,16 @@ export function attach(win) {
             const url = tab.linkedBrowser.currentURI.spec;
             if (!url || url === "about:blank") continue;
             const title = tab.label || url;
-            const text = `${url}\n${title}`.toLowerCase();
-            if (!tokens.every(token => text.includes(token))) continue;
+            if (!matchesTab(url, title, context.searchString)) continue;
             const container = context.isPrivate ? (enums.PRIVATE_USER_CONTEXT_ID ?? -1) :
               Number(tab.getAttribute("usercontextid") || 0);
             const payload = { url, title, icon: tab.image || `page-icon:${url}` };
-            let result;
             if (typeof Result.fromWire === "function") {
               payload.userContext = UrlbarUtils.getUserContextData(container);
-              result = new Result({ type: enums.RESULT_TYPE.TAB_SWITCH,
-                source: enums.RESULT_SOURCE.TABS, payload, providerName: this.name });
             } else {
               payload.userContextId = container;
-              result = new Result(enums.RESULT_TYPE.TAB_SWITCH, enums.RESULT_SOURCE.TABS, payload, {});
-              result.providerName = this.name;
             }
-            candidates.push(result);
+            candidates.push(makeResult(enums.RESULT_TYPE.TAB_SWITCH, enums.RESULT_SOURCE.TABS, payload, this.name));
           }
           const keys = pinnedKeys(context);
           const isPinned = result => keys.has(`${context.isPrivate ? "private" :
@@ -210,6 +256,22 @@ export function attach(win) {
         }
       }();
       manager.registerProvider(state.tabProvider);
+      state.searchProvider = new class UrlbarProviderPrioritySearch extends UrlbarProvider {
+        get name() { return "UrlbarProviderPrioritySearch"; }
+        get type() { return enums.PROVIDER_TYPE.PROFILE; }
+        async isActive(context) {
+          return state.config.enabled && state.config.keepSearchRow &&
+            context.sources.includes(enums.RESULT_SOURCE.SEARCH) &&
+            shouldSort({ ...context, results: [] }, enums.RESULT_TYPE);
+        }
+        async startQuery(context, addCallback) {
+          const engine = await defaultEngine(context.isPrivate);
+          if (!engine || !state.config.enabled || (manager.queries && !manager.queries.has(context))) return;
+          addCallback(this, makeResult(enums.RESULT_TYPE.SEARCH, enums.RESULT_SOURCE.SEARCH,
+            { engine: engine.name, query: context.searchString }, this.name));
+        }
+      }();
+      manager.registerProvider(state.searchProvider);
       state.wrapper = function (context, unsortedResults) {
         const config = state.config;
         if (!config.enabled) return original.call(this, context, unsortedResults);
@@ -230,7 +292,16 @@ export function attach(win) {
           const keys = pinnedKeys(context);
           const isPinned = result => keys.has(`${context.isPrivate ? "private" :
             result.payload.userContextId ?? result.payload.userContext?.id ?? 0}\n${result.payload.url}`);
-          let results = rank(context.results, config, enums.RESULT_TYPE, enums.RESULT_SOURCE, isPinned);
+          const candidates = context.results.filter(r => r.type !== enums.RESULT_TYPE.TAB_SWITCH ||
+            matchesTab(r.payload.url, r.payload.title, context.searchString));
+          const seenSearches = new Set();
+          let results = rank(candidates, config, enums.RESULT_TYPE, enums.RESULT_SOURCE, isPinned).filter(r => {
+            if (!isPlainSearch(r, enums.RESULT_TYPE)) return true;
+            const key = `${r.payload.engine}\n${r.payload.query}`;
+            if (seenSearches.has(key)) return false;
+            seenSearches.add(key);
+            return true;
+          });
           const first = results[0];
           const safeTypes = [enums.RESULT_TYPE.URL, enums.RESULT_TYPE.TAB_SWITCH, enums.RESULT_TYPE.SEARCH];
           // Native view/input expects the default result to be heuristic. Clone only
@@ -241,7 +312,9 @@ export function attach(win) {
             const heuristicIndex = results.findIndex(r => r.heuristic);
             if (heuristicIndex > 0) results.unshift(results.splice(heuristicIndex, 1)[0]);
           }
-          context.results = takeWithinSpan(results, max, span);
+          const search = config.keepSearchRow ? results.find(r => isPlainSearch(r, enums.RESULT_TYPE) &&
+            r.payload.query === context.searchString) : null;
+          context.results = takeWithinSpan(results, max, span, search);
           context.heuristicResult = context.results.find(r => r.heuristic) || null;
         } catch (error) {
           state.error = error.message;
@@ -255,6 +328,33 @@ export function attach(win) {
     }
     state.owners.add(win);
     const input = win.gURLBar;
+    let typedQuery = null;
+    const rememberInput = () => { typedQuery = input.value; };
+    const resetInput = () => { typedQuery = null; };
+    const forceSearch = async (query, event) => {
+      const engine = await defaultEngine(PrivateBrowsingUtils.isWindowPrivate(win));
+      if (!engine || win.closed || win.ZenUrlbarPriority !== api ||
+          !state.config.enabled || !state.config.forceSearchShortcut) return;
+      input.handleRevert();
+      input.view.close();
+      await input.openSearchEnginePage(query, { searchEngine: engine, event, where: "tab" });
+    };
+    const onKeyDown = event => {
+      if (!state.config.enabled || !state.config.forceSearchShortcut ||
+          !isForceSearchKey(event, AppConstants.platform)) return;
+      const query = searchText(input.value, typedQuery, input._lastSearchString, input.view.isOpen);
+      if (!query.trim()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      forceSearch(query, event).catch(error => {
+        state.error = error.message;
+        console.error("[URL Bar Priority] Search shortcut failed:", error);
+      });
+    };
+    input.inputField.addEventListener("input", rememberInput, true);
+    input.inputField.addEventListener("blur", resetInput, true);
+    win.gBrowser.tabContainer.addEventListener("TabSelect", resetInput);
+    input.inputField.addEventListener("keydown", onKeyDown, true);
     const originalPick = input.pickResult;
     const pickWrapper = function (...args) {
       // Firefox 157 can make TAB_SWITCH rows navigate by default and expose a
@@ -297,6 +397,10 @@ export function attach(win) {
       },
       destroy() {
         if (win.ZenUrlbarPriority !== api) return;
+        input.inputField.removeEventListener("input", rememberInput, true);
+        input.inputField.removeEventListener("blur", resetInput, true);
+        win.gBrowser.tabContainer.removeEventListener("TabSelect", resetInput);
+        input.inputField.removeEventListener("keydown", onKeyDown, true);
         if (input.pickResult === pickWrapper) input.pickResult = originalPick;
         state.owners.delete(win);
         if (!state.owners.size) {
@@ -306,6 +410,7 @@ export function attach(win) {
           if (muxer.sort === state.wrapper) muxer.sort = state.original;
           Services.prefs.removeObserver(PREFIX, state.observer);
           manager.unregisterProvider(state.tabProvider);
+          manager.unregisterProvider(state.searchProvider);
           delete muxer[KEY];
         }
         win.removeEventListener("unload", api.destroy);

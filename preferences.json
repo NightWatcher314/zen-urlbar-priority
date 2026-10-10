@@ -1,5 +1,7 @@
 [
   { "type": "checkbox", "property": "mod.urlbar-priority.enabled", "label": "启用自定义排序", "defaultValue": true },
+  { "type": "checkbox", "property": "mod.urlbar-priority.keepSearchRow", "label": "标签很多时仍保留一个默认引擎搜索入口", "defaultValue": true },
+  { "type": "checkbox", "property": "mod.urlbar-priority.forceSearchShortcut", "label": "Command / Ctrl+Enter 强制用默认引擎搜索原始输入（新标签）", "defaultValue": true },
   { "type": "separator", "label": "权重越大越靠前；相同权重保留原生顺序。" },
   { "type": "string", "property": "mod.urlbar-priority.pinnedTabs", "label": "固定标签 / Essentials", "defaultValue": 120, "value": "number" },
   { "type": "string", "property": "mod.urlbar-priority.openTabs", "label": "其他已打开标签", "defaultValue": 100, "value": "number" },
