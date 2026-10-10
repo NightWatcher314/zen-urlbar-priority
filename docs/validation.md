@@ -31,3 +31,9 @@
 最后一个窗口 owner 卸载时注销补充 provider 和 pref observer，撤销自身 hook。若其他模组后来包裹了本模组的 hook，保留其包装，但使本模组的旧链回到原生逻辑。
 
 语法错误、无效 provider JSON 或排序内部异常回退原生结果。未写入用户日常 profile；GitHub 发布及仓库文件回读属于发布验收。
+
+## GitHub 发布回读
+
+2026-10-10 发布公开仓库 [NightWatcher314/zen-urlbar-priority](https://github.com/NightWatcher314/zen-urlbar-priority)，默认分支 `main`，首发 tag / Release 为 [v0.1.0](https://github.com/NightWatcher314/zen-urlbar-priority/releases/tag/v0.1.0)。
+
+匿名下载 `theme.json`、`preferences.json`、`priority.uc.js`、`priority.sys.mjs`，逐字节与本地一致；GitHub codeload 的 `main` ZIP 内四个文件同样一致。Release 附 ZIP 安装包及 SHA-256 文件。GitHub 仓库安装仍需启用 Sine 第三方 JS，尚未提交到 Sine 市场列表。
