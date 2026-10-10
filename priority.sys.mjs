@@ -44,14 +44,15 @@
     }).sort((a, b) => b.weight - a.weight || a.index - b.index).map(item => item.result);
   }
 
-  function shouldSort(context, types, sources = {}) {
+  function shouldSort(context, types) {
     const text = context.searchString?.trim();
-    // Respect explicit engine/restriction mode, bookmark keywords and Zen commands.
+    // Respect explicit modes and bookmark keywords. Ordinary queries can contain
+    // Zen action suggestions (e.g. New Space for "new"); those are sortable results,
+    // not evidence that the user entered a command mode.
     return Boolean(text && !context.searchMode && !context.restrictToken &&
       context.restrictSource == null && !/^[@%*^+#?>]/.test(text) &&
       !context.results.some(r => r.type === types.KEYWORD ||
-        r.payload?.providesSearchMode || r.payload?.zenAction || r.payload?.isZenAction ||
-        (r.heuristic && sources.ZEN_ACTIONS !== undefined && r.source === sources.ZEN_ACTIONS)));
+        r.payload?.providesSearchMode));
   }
 
   function takeWithinSpan(results, max, span) {
@@ -130,7 +131,11 @@ export function attach(win) {
 
     function cloneHeuristic(result, heuristic) {
       if (typeof result.toWire === "function" && typeof Result.fromWire === "function") {
-        return Result.fromWire({ ...result.toWire(), heuristic });
+        const copy = Result.fromWire({ ...result.toWire(), heuristic });
+        // Zen attaches public provider data such as commandId outside the wire
+        // schema. Keep it when demoting an action's heuristic flag.
+        Object.defineProperties(copy, Object.getOwnPropertyDescriptors(result));
+        return copy;
       }
       // Legacy Firefox result classes have a positional constructor and writable flags.
       const copy = new Result(result.type, result.source, { ...result.payload }, result.payloadHighlights);
@@ -163,7 +168,7 @@ export function attach(win) {
           return state.config.enabled &&
             Services.prefs.getBoolPref("browser.urlbar.suggest.openpage", true) &&
             context.sources.includes(enums.RESULT_SOURCE.TABS) &&
-            shouldSort({ ...context, results: [] }, enums.RESULT_TYPE, enums.RESULT_SOURCE);
+            shouldSort({ ...context, results: [] }, enums.RESULT_TYPE);
         }
         async startQuery(context, addCallback, controller) {
           // The originating controller owns the window. Focus can change while
@@ -217,7 +222,7 @@ export function attach(win) {
         let returnValue;
         try { returnValue = original.call(this, context, unsortedResults); }
         finally { context.maxResults = max; }
-        if (!shouldSort(context, enums.RESULT_TYPE, enums.RESULT_SOURCE)) {
+        if (!shouldSort(context, enums.RESULT_TYPE)) {
           // Run again with the native limit, preserving special queries exactly.
           return original.call(this, context, unsortedResults);
         }
@@ -260,7 +265,7 @@ export function attach(win) {
       const elementIndex = modern ? null : 2;
       const element = modern ? args[0].element : args[elementIndex];
       if (!state.config.enabled || !this.view.queryContext ||
-          !shouldSort(this.view.queryContext, enums.RESULT_TYPE, enums.RESULT_SOURCE) ||
+          !shouldSort(this.view.queryContext, enums.RESULT_TYPE) ||
           result?.type !== enums.RESULT_TYPE.TAB_SWITCH ||
           !Services.prefs.getBoolPref("browser.urlbar.secondaryActions.switchToTab", false) ||
           this.hasAttribute("action-override") || element?.dataset?.action || element?.dataset?.command) {

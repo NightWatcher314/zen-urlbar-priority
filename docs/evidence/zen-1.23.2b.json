@@ -2,6 +2,8 @@
   "checks": [
     "local installer registry passes real Sine JS gate and preferences parser",
     "scriptloader initializes native muxer hook",
+    "demoted learned Zen action keeps commandId and native execution payload",
+    "ordinary new query prioritizes pinned app despite New Space action suggestion",
     "native Command/Ctrl+T command opens Zen floating new-tab URL bar",
     "oldest pinned tab wins beyond provider and muxer caps; selected without rewriting input",
     "Enter switches to existing pinned tab; no duplicate tab",

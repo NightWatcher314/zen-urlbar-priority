@@ -10,8 +10,8 @@
 
 ## 已通过
 
-- [地址栏与 Sine 集成：16 项](evidence/zen-1.23.2b.json)：原生新标签命令、超出原生候选上限的旧固定标签、默认选中、Enter 不重复建标签、secondaryActions 行为、动态权重、provider 覆盖、限制搜索及其 Enter 行为、无效 JSON 回退、重载卸载、查询窗口归属、首窗口关闭后的连续使用、隐私固定标签及隐私隔离、Sine JS gate 和配置解析。
-- [排序单测：6 项](evidence/ranking.txt)：类别权重、provider 名称兼容、稳定排序、0 / 负权重、错误配置、特殊搜索、结果跨度。
+- [地址栏与 Sine 集成：18 项](evidence/zen-1.23.2b.json)：原生新标签命令、超出原生候选上限的旧固定标签、默认选中、Enter 不重复建标签、secondaryActions 行为、动态权重、provider 覆盖、限制搜索及其 Enter 行为、无效 JSON 回退、重载卸载、查询窗口归属、首窗口关闭后的连续使用、隐私固定标签及隐私隔离、Sine JS gate 和配置解析、普通 `new` 查询中与 Zen 动作建议并存的固定标签排序，以及 learned action 降级后的执行数据保留。
+- [排序单测：7 项](evidence/ranking.txt)：类别权重、provider 名称兼容、稳定排序、0 / 负权重、错误配置、特殊搜索、结果跨度、普通 Zen 动作建议不屏蔽排序。
 - [安装器：3 项](evidence/installer.txt)：只读预览、备份、保留其他注册项、写入失败回滚和重试、拒绝未安装 Sine 的 profile。
 - JS 语法检查；只读独立代码审查发现的问题已修复。
 
@@ -37,3 +37,11 @@
 2026-10-10 发布公开仓库 [NightWatcher314/zen-urlbar-priority](https://github.com/NightWatcher314/zen-urlbar-priority)，默认分支 `main`，首发 tag / Release 为 [v0.1.0](https://github.com/NightWatcher314/zen-urlbar-priority/releases/tag/v0.1.0)。
 
 匿名下载 `theme.json`、`preferences.json`、`priority.uc.js`、`priority.sys.mjs`，逐字节与本地一致；GitHub codeload 的 `main` ZIP 内四个文件同样一致。Release 附 ZIP 安装包及 SHA-256 文件。GitHub 仓库安装仍需启用 Sine 第三方 JS，尚未提交到 Sine 市场列表。
+
+## v0.1.1 回归修复
+
+普通输入 `new` 可触发 New Space 等 `zenAction` 建议。v0.1.0 把任何这类结果当作显式命令模式，跳过整组排序；即使模组已加载且固定标签权重为 120，标签仍会位于动作 / 搜索结果之后。
+
+回归测试在 v0.1.0 逻辑上实际失败，修复后通过：查询中确实存在 `zenAction`，匹配的固定应用仍排第一且默认选中，Enter 切换原标签、标签数量不变。显式 `searchMode`、限制 token、书签关键字及命令前缀保留原生行为。降级 learned action 时保留其 `commandId` 和原生执行 payload。
+
+更新后需完全退出并重开浏览器，清除进程级系统模块缓存。日常用户 profile 的更新仍由 Sine 管理。

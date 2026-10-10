@@ -75,7 +75,7 @@ window.ZenUrlbarPriority.status()   // active / error / owners
 window.ZenUrlbarPriority.results()  // 当前结果 provider / type / source；不输出 URL 或标题
 ```
 
-错误 JSON 会停用自定义排序，回退原生结果；修正后自动恢复。地址栏“已打开标签”建议需保持开启。启用显式搜索引擎、限制搜索 token（例如 `%`）、书签关键字或 Zen 命令时，保留原生行为。
+错误 JSON 会停用自定义排序，回退原生结果；修正后自动恢复。地址栏“已打开标签”建议需保持开启。启用显式搜索引擎、限制搜索 token（例如 `%`）、书签关键字或显式 Zen 命令模式时，保留原生行为。普通输入出现 New Space 等动作建议时，仍按权重优先显示标签；动作建议保留其原生执行功能。
 
 ## 实现边界
 

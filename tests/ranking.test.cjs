@@ -42,9 +42,20 @@ test('explicit search modes, bookmark keywords and empty queries retain native b
     { searchString: 'q', restrictSource: 1 },
     { searchString: 'keyword q', results: [result('keyword', { type: 4 })] },
     { searchString: 'q', results: [result('mode', { payload: { providesSearchMode: true } })] },
-    { searchString: 'close tab', results: [result('command', { payload: { zenAction: true } })] },
+    { searchString: '> new', results: [result('command', { payload: { zenAction: true } })] },
   ]) assert.equal(core.shouldSort({ results: [], ...context }, types), false);
   assert.equal(core.shouldSort({ searchString: 'github', results: [] }, types), true);
+});
+
+test('ordinary Zen action suggestions do not suppress tab/provider priority', () => {
+  const action = result('new-space', { type: 8, source: 9, payload: { zenAction: true } });
+  const pin = result('new-api', { type: 1 });
+  for (const heuristic of [false, true]) {
+    action.heuristic = heuristic;
+    const context = { searchString: 'new', results: [action, pin] };
+    assert.equal(core.shouldSort(context, types), true);
+    assert.equal(core.rank(context.results, config, types, sources, () => true)[0], pin);
+  }
 });
 
 test('final cap honors multi-row results and continues after a result that cannot fit', () => {

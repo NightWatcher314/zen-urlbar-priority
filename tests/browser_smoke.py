@@ -150,7 +150,8 @@ def main():
                           return {status:ZenUrlbarPriority.status(),
                             query:gURLBar.view.queryContext?.searchString,
                             results:(gURLBar.view.queryContext?.results || []).map(r => ({
-                              type:r.type, url:r.payload.url, provider:r.providerName, heuristic:r.heuristic
+                              type:r.type, url:r.payload.url, provider:r.providerName, heuristic:r.heuristic,
+                              source:r.source, zenAction:r.payload.zenAction, providesSearchMode:r.payload.providesSearchMode
                             })), selected:gURLBar.view.selectedResult?.payload.url,
                             value:gURLBar.value};
                         ''')
@@ -163,6 +164,42 @@ def main():
                         last = current
                         time.sleep(.1)
                     raise RuntimeError(f"No stable results: {last}")
+
+                m.execute_script('''
+                    window.__newAppPin = gBrowser.addTrustedTab(arguments[0] + '/new-api');
+                    gBrowser.pinTab(__newAppPin);
+                    BrowserCommands.openTab();
+                ''', script_args=[base])
+                time.sleep(.5)
+                current = query('new')
+                assert current['results'][0]['url'] == base + '/new-api', current
+                assert any(r['zenAction'] for r in current['results']), current
+                assert current['selected'] == base + '/new-api', current
+                clone_check = m.execute_script('''
+                    const {UrlbarResult} = ChromeUtils.importESModule('chrome://browser/content/urlbar/UrlbarResult.mjs');
+                    const {UrlbarQueryContext} = ChromeUtils.importESModule('chrome://browser/content/urlbar/UrlbarQueryContext.mjs');
+                    const {ProvidersManager} = ChromeUtils.importESModule('moz-src:///browser/components/urlbar/UrlbarProvidersManager.sys.mjs');
+                    const live = gURLBar.view.queryContext;
+                    const context = UrlbarQueryContext.fromWire(live.toWire());
+                    context.heuristicResult = null;
+                    const tab = UrlbarResult.fromWire({...live.results.find(r => r.type === 1).toWire(), heuristic:false});
+                    const action = UrlbarResult.fromWire({...live.results.find(r => r.payload.zenAction).toWire(), heuristic:true, suggestedIndex:undefined});
+                    action.commandId = 'priority-regression-command';
+                    const command = action.payload.zenCommand;
+                    ProvidersManager.getInstanceForSap('urlbar').muxers.get('UnifiedComplete').sort(context, [action, tab]);
+                    const demoted = context.results.find(r => r.payload.zenAction);
+                    return {firstType:context.results[0].type, heuristic:demoted?.heuristic,
+                      commandId:demoted?.commandId, commandPreserved:demoted?.payload.zenCommand === command};
+                ''')
+                assert clone_check == {'firstType':1, 'heuristic':False,
+                    'commandId':'priority-regression-command', 'commandPreserved':True}, clone_check
+                report['checks'].append('demoted learned Zen action keeps commandId and native execution payload')
+                count = m.execute_script("return gBrowser.tabs.length;")
+                m.execute_script("return gURLBar.inputField;").send_keys(Keys.ENTER)
+                time.sleep(.4)
+                assert m.execute_script("return gBrowser.selectedTab === __newAppPin;")
+                assert m.execute_script("return gBrowser.tabs.length;") == count
+                report['checks'].append('ordinary new query prioritizes pinned app despite New Space action suggestion')
 
                 m.execute_script("BrowserCommands.openTab();")
                 if report["name"] == "Zen":
